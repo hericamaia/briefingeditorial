@@ -317,8 +317,8 @@ async function send(){
   if(A.q02)fd.append("_replyto",A.q02);
   fd.append("_honey","");
   collect().forEach(g=>g.items.forEach(x=>{if(x.q.type!=="file")fd.append(`${pad(x.q.n)}. ${x.q.label}`,x.v||"(não respondido)")}));
-  fileList.forEach(x=>fd.append(`${pad(x.q.n)}. ${x.q.label}`,x.f,x.f.name));
-  fd.append("Arquivos anexados",fileList.map(x=>x.f.name).join(", ")||"(nenhum)");
+  fileList.forEach((x,i)=>fd.append(`anexo_${i+1}_pergunta_${pad(x.q.n)}`,x.f,x.f.name));
+  fd.append("Arquivos anexados",fileList.map((x,i)=>`anexo ${i+1} (pergunta ${x.q.n}): ${x.f.name}`).join("; ")||"(nenhum)");
   fd.append("Enviado em",new Date().toLocaleString("pt-BR"));
   btn.disabled=true;btn.textContent="Enviando…";
   try{
