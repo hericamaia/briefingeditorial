@@ -222,7 +222,7 @@ F.innerHTML=STEPS.map((s,i)=>`<section class="panel" data-s="${i}" hidden>
   ${c.qs.map(q=>`<div class="q" data-q="${q.id}"><${q.type==="single"||q.type==="multi"?"div":"label"} class="l" id="l-${q.id}" ${q.type==="single"||q.type==="multi"?"":`for="${q.id}"`}>${esc(q.label)}${q.r?"<i aria-hidden='true'>*</i>":""}</${q.type==="single"||q.type==="multi"?"div":"label"}>${q.h?`<p class="h">${esc(q.h)}</p>`:""}${field(q)}<p class="err" hidden role="alert"></p></div>`).join("")}</div>`).join("")}
  <div class="bar">${i>0?`<button type="button" class="btn s" data-back>Voltar</button>`:"<span></span>"}<button type="button" class="btn" data-next>${i<STEPS.length-1?"Continuar":"Revisar respostas"}</button></div></section>`).join("")
  +`<section class="panel" data-s="${STEPS.length}" hidden><h2>Revise e envie</h2><p class="lead">Confira suas respostas. Se algo estiver errado, volte à etapa e corrija antes de enviar.</p><div id="rv"></div><div id="sm"></div><div class="bar"><button type="button" class="btn s" data-back>Voltar</button><button type="button" class="btn" id="send">Enviar briefing</button></div></section>
- <section class="panel" data-s="done" hidden><h2>Respostas prontas</h2><p class="lead">Baixe a cópia das suas respostas e envie para hericamaiade.araujo@gmail.com, junto com os arquivos que quiser anexar.</p><div style="display:flex;gap:12px;flex-wrap:wrap"><button type="button" class="btn s" id="dl">Baixar cópia (.txt)</button><button type="button" class="btn s" id="pr">Imprimir / salvar em PDF</button><button type="button" class="btn" id="nw">Iniciar novo briefing</button></div></section>`;
+ <section class="panel" data-s="done" hidden><h2>Briefing enviado</h2><p class="lead">Obrigado! Recebemos todas as suas respostas e anexos e entraremos em contato em breve.</p><p id="srv" class="note"></p><div style="display:flex;gap:12px;flex-wrap:wrap"><button type="button" class="btn s" id="dl">Baixar cópia (.txt)</button><button type="button" class="btn s" id="pr">Imprimir / salvar em PDF</button><button type="button" class="btn" id="nw">Iniciar novo briefing</button></div></section>`;
 
 /* restaura valores */
 ALLQ.forEach(q=>{const v=A[q.id];if(v==null||q.type==="file")return;
@@ -299,7 +299,7 @@ document.addEventListener("click",e=>{
   else if("back"in b.dataset)show(cur-1);
 });
 $("#send").onclick=send;
-$("#dl").onclick=async()=>{try{const d=await claude.use("downloads");if(d)await d.save({filename:"briefing-editorial.txt",data:new Blob([done],{type:"text/plain;charset=utf-8"})})}catch(e){}};
+$("#dl").onclick=()=>{const u=URL.createObjectURL(new Blob([done],{type:"text/plain;charset=utf-8"})),a=document.createElement("a");a.href=u;a.download="briefing-editorial.txt";a.click();URL.revokeObjectURL(u)};
 $("#pr").onclick=()=>{$("#pa").innerHTML="<h1>Briefing de design editorial</h1>"+esc(done).split("\n").map(l=>`<p>${l||"&nbsp;"}</p>`).join("");window.print()};
 $("#nw").onclick=()=>{A={};FILES={};done=null;maxStep=0;ALLQ.forEach(q=>F.querySelectorAll(`[name="${q.id}"]`).forEach(el=>{el.type==="radio"||el.type==="checkbox"?el.checked=false:el.value=""}));show(0)};
 
@@ -310,10 +310,29 @@ async function send(){
   const fileList=collect().flatMap(g=>g.items).filter(x=>x.q.type==="file").flatMap(x=>(FILES[x.q.id]||[]).map(f=>({q:x.q,f})));
   const total=fileList.reduce((s,x)=>s+x.f.size,0);
   if(total>LIMITE_ANEXOS_MB*1048576){box.innerHTML=`<div class="msg">Os anexos somam ${(total/1048576).toFixed(1)} MB e o limite é ${LIMITE_ANEXOS_MB} MB. Remova ou compacte alguns arquivos (.zip) e tente de novo. Suas respostas continuam salvas.</div>`;return}
-  done=asText();
-  try{localStorage.removeItem(STORE)}catch(e){}
-  F.querySelectorAll(".panel").forEach(p=>p.hidden=p.dataset.s!=="done");
-  $("#rail").innerHTML="";$("#top").innerHTML="";window.scrollTo({top:0});
+  if(EMAIL_DESTINO.startsWith("SEU-EMAIL")){box.innerHTML=`<div class="msg">Envio ainda não configurado: edite EMAIL_DESTINO no código da página.</div>`;return}
+  const fd=new FormData(),pad=n=>String(n).padStart(2,"0");
+  fd.append("_subject","Novo briefing editorial: "+(A.q01||"cliente"));
+  fd.append("_template","table");fd.append("_captcha","false");
+  if(A.q02)fd.append("_replyto",A.q02);
+  fd.append("_honey","");
+  collect().forEach(g=>g.items.forEach(x=>{if(x.q.type!=="file")fd.append(`${pad(x.q.n)}. ${x.q.label}`,x.v||"(não respondido)")}));
+  fileList.forEach(x=>fd.append(`${pad(x.q.n)}. ${x.q.label}`,x.f,x.f.name));
+  fd.append("Arquivos anexados",fileList.map(x=>x.f.name).join(", ")||"(nenhum)");
+  fd.append("Enviado em",new Date().toLocaleString("pt-BR"));
+  btn.disabled=true;btn.textContent="Enviando…";
+  try{
+    const r=await fetch("https://formsubmit.co/ajax/"+encodeURIComponent(EMAIL_DESTINO),{method:"POST",headers:{Accept:"application/json"},body:fd});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.success===false||d.success==="false")throw new Error(d.message||"Falha no envio");
+    done=asText();
+    $("#srv").textContent=d.message?("Resposta do servidor de e-mail: "+d.message):"";
+    try{localStorage.removeItem(STORE)}catch(e){}
+    F.querySelectorAll(".panel").forEach(p=>p.hidden=p.dataset.s!=="done");
+    $("#rail").innerHTML="";$("#top").innerHTML="";window.scrollTo({top:0});
+  }catch(err){
+    box.innerHTML=`<div class="msg">Não foi possível enviar agora. Suas respostas continuam salvas nesta página: confira a conexão e tente novamente.<br><small>${esc(err.message)}</small></div>`;
+  }
   btn.disabled=false;btn.textContent="Enviar briefing";
 }
 
