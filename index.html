@@ -321,22 +321,26 @@ async function send(){
   fd.append("Arquivos anexados",fileList.map((x,i)=>`anexo ${i+1} (pergunta ${x.q.n}): ${x.f.name}`).join("; ")||"(nenhum)");
   fd.append("Enviado em",new Date().toLocaleString("pt-BR"));
   btn.disabled=true;btn.textContent="Enviando…";
-  try{
-    const r=await fetch("https://formsubmit.co/ajax/"+encodeURIComponent(EMAIL_DESTINO),{method:"POST",headers:{Accept:"application/json"},body:fd});
-    const d=await r.json().catch(()=>({}));
-    if(!r.ok||d.success===false||d.success==="false")throw new Error(d.message||"Falha no envio");
-    done=asText();
-    $("#srv").textContent=d.message?("Resposta do servidor de e-mail: "+d.message):"";
-    try{localStorage.removeItem(STORE)}catch(e){}
-    F.querySelectorAll(".panel").forEach(p=>p.hidden=p.dataset.s!=="done");
-    $("#rail").innerHTML="";$("#top").innerHTML="";window.scrollTo({top:0});
-  }catch(err){
-    box.innerHTML=`<div class="msg">Não foi possível enviar agora. Suas respostas continuam salvas nesta página: confira a conexão e tente novamente.<br><small>${esc(err.message)}</small></div>`;
+  fd.append("_next",location.origin+location.pathname+"?enviado=1");
+  const form=document.createElement("form");form.method="POST";form.enctype="multipart/form-data";form.style.display="none";
+  form.action="https://formsubmit.co/"+encodeURIComponent(EMAIL_DESTINO);
+  for(const [k,v] of fd.entries()){
+    const i=document.createElement("input");i.name=k;
+    if(v instanceof File){i.type="file";const dt=new DataTransfer();dt.items.add(v);i.files=dt.files}
+    else{i.type="hidden";i.value=v}
+    form.appendChild(i);
   }
+  document.body.appendChild(form);
+  form.submit();
+  return;
   btn.disabled=false;btn.textContent="Enviar briefing";
 }
 
-show(Math.min(cur,STEPS.length));
+if(/[?&]enviado=1/.test(location.search)){
+  done=asText();try{localStorage.removeItem(STORE)}catch(e){}
+  history.replaceState(null,"",location.pathname);
+  F.querySelectorAll(".panel").forEach(p=>p.hidden=p.dataset.s!=="done");
+}else show(Math.min(cur,STEPS.length));
 </script>
 </body>
 </html>
