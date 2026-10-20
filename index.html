@@ -341,8 +341,8 @@ async function send(){
   btn.disabled=true;btn.textContent="Enviando…";
   try{const slug=(A.q01||"cliente").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"-").toLowerCase();
     fd.append("briefing_pdf",new File([makePDF().output("blob")],"briefing-"+slug+".pdf",{type:"application/pdf"}))}catch(e){}
-  fd.append("_next",location.origin+location.pathname+"?enviado=1");
-  const form=document.createElement("form");form.method="POST";form.enctype="multipart/form-data";form.style.display="none";
+  const fr=document.createElement("iframe");fr.name="envio_frame";fr.style.display="none";document.body.appendChild(fr);
+  const form=document.createElement("form");form.method="POST";form.enctype="multipart/form-data";form.style.display="none";form.target="envio_frame";
   form.action="https://formsubmit.co/"+encodeURIComponent(EMAIL_DESTINO);
   for(const [k,v] of fd.entries()){
     const i=document.createElement("input");i.name=k;
@@ -351,7 +351,15 @@ async function send(){
     form.appendChild(i);
   }
   document.body.appendChild(form);
+  const fim=ok=>{clearTimeout(tm);fr.onload=null;form.remove();fr.remove();
+    if(ok){done=asText();try{localStorage.removeItem(STORE)}catch(e){}
+      F.querySelectorAll(".panel").forEach(p=>p.hidden=p.dataset.s!=="done");
+      $("#rail").innerHTML="";$("#top").innerHTML="";window.scrollTo({top:0})}
+    else box.innerHTML=`<div class="msg">Não foi possível confirmar o envio. Suas respostas continuam salvas nesta página: confira a conexão e tente novamente.</div>`;
+    btn.disabled=false;btn.textContent="Enviar briefing"};
+  const tm=setTimeout(()=>fim(false),120000);
   form.submit();
+  fr.onload=()=>fim(true);
   return;
   btn.disabled=false;btn.textContent="Enviar briefing";
 }
