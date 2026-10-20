@@ -71,6 +71,7 @@ nav{display:none}
 }
 @media print{body>*{display:none!important}body>#pa{display:block!important;color:#000;background:#fff}#pa p{margin:4px 0}}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
@@ -330,17 +331,28 @@ async function send(){
   if(total>LIMITE_ANEXOS_MB*1048576){box.innerHTML=`<div class="msg">Os anexos somam ${(total/1048576).toFixed(1)} MB e o limite é ${LIMITE_ANEXOS_MB} MB. Remova ou compacte alguns arquivos (.zip) e tente de novo. Suas respostas continuam salvas.</div>`;return}
   if(EMAIL_DESTINO.startsWith("SEU-EMAIL")){box.innerHTML=`<div class="msg">Envio ainda não configurado: edite EMAIL_DESTINO no código da página.</div>`;return}
   const fd=new FormData(),pad=n=>String(n).padStart(2,"0");
+  btn.disabled=true;btn.textContent="Enviando…";
+  const slug=(A.q01||"cliente").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"-").replace(/^-|-$/g,"").toLowerCase()||"cliente";
   fd.append("_subject","Novo briefing editorial: "+(A.q01||"cliente"));
   fd.append("_template","table");fd.append("_captcha","false");
   if(A.q02)fd.append("_replyto",A.q02);
   fd.append("_honey","");
-  collect().forEach(g=>g.items.forEach(x=>{if(x.q.type!=="file")fd.append(`${pad(x.q.n)}. ${x.q.label}`,x.v||"(não respondido)")}));
-  fileList.forEach((x,i)=>fd.append(`anexo_${i+1}_pergunta_${pad(x.q.n)}`,x.f,x.f.name));
-  fd.append("Arquivos anexados",fileList.map((x,i)=>`anexo ${i+1} (pergunta ${x.q.n}): ${x.f.name}`).join("; ")||"(nenhum)");
+  fd.append("Cliente",A.q01||"");fd.append("E-mail",A.q02||"");fd.append("WhatsApp",A.q04||"");
+  fd.append("Resumo","Respostas completas no PDF anexo.");
+  const nomes=[];
+  try{fd.append("briefing_pdf",new File([makePDF().output("blob")],"briefing-"+slug+".pdf",{type:"application/pdf"}))}
+  catch(e){fd.append("Aviso","Não foi possível gerar o PDF; respostas abaixo.");collect().forEach(g=>g.items.forEach(x=>{if(x.q.type!=="file")fd.append(`${pad(x.q.n)}. ${x.q.label}`,x.v||"(não respondido)")}))}
+  const usados={};
+  const fname=x=>{let n=`Pergunta-${pad(x.q.n)}_${x.f.name.replace(/[\\/:*?"<>|]/g,"_")}`;usados[n]=(usados[n]||0)+1;if(usados[n]>1)n=`Pergunta-${pad(x.q.n)}_${usados[n]}_${x.f.name.replace(/[\\/:*?"<>|]/g,"_")}`;nomes.push(n);return n};
+  if(fileList.length){
+    if(window.JSZip){
+      const z=new JSZip();fileList.forEach(x=>z.file(fname(x),x.f));
+      const blob=await z.generateAsync({type:"blob",compression:"STORE"});
+      fd.append("imagens_zip",new File([blob],"imagens-"+slug+".zip",{type:"application/zip"}));
+    }else fileList.forEach((x,i)=>{const n=fname(x);fd.append("anexo_"+(i+1),new File([x.f],n,{type:x.f.type}))});
+  }
+  fd.append("Arquivos enviados",nomes.join("; ")||"(nenhum)");
   fd.append("Enviado em",new Date().toLocaleString("pt-BR"));
-  btn.disabled=true;btn.textContent="Enviando…";
-  try{const slug=(A.q01||"cliente").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9]+/g,"-").toLowerCase();
-    fd.append("briefing_pdf",new File([makePDF().output("blob")],"briefing-"+slug+".pdf",{type:"application/pdf"}))}catch(e){}
   const fr=document.createElement("iframe");fr.name="envio_frame";fr.style.display="none";document.body.appendChild(fr);
   const form=document.createElement("form");form.method="POST";form.enctype="multipart/form-data";form.style.display="none";form.target="envio_frame";
   form.action="https://formsubmit.co/"+encodeURIComponent(EMAIL_DESTINO);
